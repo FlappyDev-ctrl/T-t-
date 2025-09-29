@@ -2936,14 +2936,33 @@ void CMenus::RenderSettingsAppearance(CUIRect MainView)
 
 		GameClient()->m_NamePlates.RenderNamePlatePreview(Position, Dummy);
 	}
-	else if(s_CurTab == APPEARANCE_TAB_HOOK_COLLISION)
-	{
-		MainView.VSplitMid(&LeftView, &RightView, MarginBetweenViews);
+        else if(s_CurTab == APPEARANCE_TAB_HOOK_COLLISION)
+        {
+                MainView.VSplitMid(&LeftView, &RightView, MarginBetweenViews);
 
-		// ***** Hookline ***** //
-		Ui()->DoLabel_AutoLineSize(Localize("Hook collision line"), HeadlineFontSize,
-			TEXTALIGN_ML, &LeftView, HeadlineHeight);
-		LeftView.HSplitTop(MarginSmall, nullptr, &LeftView);
+                // ***** Hook assist ***** //
+                Ui()->DoLabel_AutoLineSize(Localize("Hook assist"), HeadlineFontSize,
+                        TEXTALIGN_ML, &LeftView, HeadlineHeight);
+                LeftView.HSplitTop(MarginSmall, nullptr, &LeftView);
+
+                LeftView.HSplitTop(LineSize, &Button, &LeftView);
+                if(DoButton_CheckBox(&g_Config.m_ClHookAssist, Localize("Automatically release hook near freeze"), g_Config.m_ClHookAssist, &Button))
+                {
+                        g_Config.m_ClHookAssist = g_Config.m_ClHookAssist ? 0 : 1;
+                }
+
+                if(g_Config.m_ClHookAssist)
+                {
+                        LeftView.HSplitTop(LineSize * 2.0f, &Button, &LeftView);
+                        Ui()->DoScrollbarOption(&g_Config.m_ClHookAssistTicks, &g_Config.m_ClHookAssistTicks, &Button, Localize("Hook assist prediction ticks"), 1, 50, &CUi::ms_LinearScrollbarScale, CUi::SCROLLBAR_OPTION_MULTILINE);
+                }
+
+                LeftView.HSplitTop(MarginBetweenViews, nullptr, &LeftView);
+
+                // ***** Hookline ***** //
+                Ui()->DoLabel_AutoLineSize(Localize("Hook collision line"), HeadlineFontSize,
+                        TEXTALIGN_ML, &LeftView, HeadlineHeight);
+                LeftView.HSplitTop(MarginSmall, nullptr, &LeftView);
 
 		// General hookline settings
 		LeftView.HSplitTop(LineSize, &Button, &LeftView);

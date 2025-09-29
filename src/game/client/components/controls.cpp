@@ -2,6 +2,8 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include <base/math.h>
 
+#include <algorithm>
+
 #include <engine/client.h>
 #include <engine/shared/config.h>
 
@@ -10,6 +12,8 @@
 #include <game/client/components/menus.h>
 #include <game/client/components/scoreboard.h>
 #include <game/client/gameclient.h>
+#include <game/client/prediction/entities/character.h>
+#include <game/client/prediction/gameworld.h>
 #include <game/collision.h>
 
 #include <base/vmath.h>
@@ -283,24 +287,26 @@ int CControls::SnapInput(int *pData)
 			m_aInputData[!g_Config.m_ClDummy] = *pDummyInput;
 		}
 
-		if(g_Config.m_ClDummyControl)
-		{
-			CNetObj_PlayerInput *pDummyInput = &GameClient()->m_DummyInput;
-			pDummyInput->m_Jump = g_Config.m_ClDummyJump;
+                if(g_Config.m_ClDummyControl)
+                {
+                        CNetObj_PlayerInput *pDummyInput = &GameClient()->m_DummyInput;
+                        pDummyInput->m_Jump = g_Config.m_ClDummyJump;
 
-			if(g_Config.m_ClDummyFire)
-				pDummyInput->m_Fire = g_Config.m_ClDummyFire;
-			else if((pDummyInput->m_Fire & 1) != 0)
-				pDummyInput->m_Fire++;
+                        if(g_Config.m_ClDummyFire)
+                                pDummyInput->m_Fire = g_Config.m_ClDummyFire;
+                        else if((pDummyInput->m_Fire & 1) != 0)
+                                pDummyInput->m_Fire++;
 
-			pDummyInput->m_Hook = g_Config.m_ClDummyHook;
-		}
+                        pDummyInput->m_Hook = g_Config.m_ClDummyHook;
+                }
 
-		// stress testing
+                HookAssist();
+
+                // stress testing
 #ifdef CONF_DEBUG
-		if(g_Config.m_DbgStress)
-		{
-			float t = Client()->LocalTime();
+                if(g_Config.m_DbgStress)
+                {
+                        float t = Client()->LocalTime();
 			mem_zero(&m_aInputData[g_Config.m_ClDummy], sizeof(m_aInputData[0]));
 
 			m_aInputData[g_Config.m_ClDummy].m_Direction = ((int)t / 2) & 1;
@@ -479,36 +485,95 @@ float CControls::GetMaxMouseDistance() const
 
 bool CControls::CheckNewInput()
 {
-	CNetObj_PlayerInput TestInput = m_aInputData[g_Config.m_ClDummy];
-	TestInput.m_Direction = 0;
-	if(m_aInputDirectionLeft[g_Config.m_ClDummy] && !m_aInputDirectionRight[g_Config.m_ClDummy])
-		TestInput.m_Direction = -1;
-	if(!m_aInputDirectionLeft[g_Config.m_ClDummy] && m_aInputDirectionRight[g_Config.m_ClDummy])
-		TestInput.m_Direction = 1;
+        CNetObj_PlayerInput TestInput = m_aInputData[g_Config.m_ClDummy];
+        TestInput.m_Direction = 0;
+        if(m_aInputDirectionLeft[g_Config.m_ClDummy] && !m_aInputDirectionRight[g_Config.m_ClDummy])
+                TestInput.m_Direction = -1;
+        if(!m_aInputDirectionLeft[g_Config.m_ClDummy] && m_aInputDirectionRight[g_Config.m_ClDummy])
+                TestInput.m_Direction = 1;
 
-	bool NewInput = false;
-	if(m_FastInput.m_Direction != TestInput.m_Direction)
-		NewInput = true;
-	if(m_FastInput.m_Hook != TestInput.m_Hook)
-		NewInput = true;
-	if(m_FastInput.m_Fire != TestInput.m_Fire)
-		NewInput = true;
-	if(m_FastInput.m_Jump != TestInput.m_Jump)
-		NewInput = true;
-	if(m_FastInput.m_NextWeapon != TestInput.m_NextWeapon)
-		NewInput = true;
-	if(m_FastInput.m_PrevWeapon != TestInput.m_PrevWeapon)
-		NewInput = true;
-	if(m_FastInput.m_WantedWeapon != TestInput.m_WantedWeapon)
-		NewInput = true;
+        bool NewInput = false;
+        if(m_FastInput.m_Direction != TestInput.m_Direction)
+                NewInput = true;
+        if(m_FastInput.m_Hook != TestInput.m_Hook)
+                NewInput = true;
+        if(m_FastInput.m_Fire != TestInput.m_Fire)
+                NewInput = true;
+        if(m_FastInput.m_Jump != TestInput.m_Jump)
+                NewInput = true;
+        if(m_FastInput.m_NextWeapon != TestInput.m_NextWeapon)
+                NewInput = true;
+        if(m_FastInput.m_PrevWeapon != TestInput.m_PrevWeapon)
+                NewInput = true;
+        if(m_FastInput.m_WantedWeapon != TestInput.m_WantedWeapon)
+                NewInput = true;
 
-	if(g_Config.m_ClSubTickAiming)
-	{
-		TestInput.m_TargetX = (int)m_aMousePos[g_Config.m_ClDummy].x;
-		TestInput.m_TargetY = (int)m_aMousePos[g_Config.m_ClDummy].y;
-	}
+        if(g_Config.m_ClSubTickAiming)
+        {
+                TestInput.m_TargetX = (int)m_aMousePos[g_Config.m_ClDummy].x;
+                TestInput.m_TargetY = (int)m_aMousePos[g_Config.m_ClDummy].y;
+        }
 
-	m_FastInput = TestInput;
+        m_FastInput = TestInput;
 
-	return NewInput;
+        return NewInput;
+}
+
+void CControls::HookAssist()
+{
+        if(!g_Config.m_ClHookAssist)
+                return;
+
+        if(!GameClient()->Predict())
+                return;
+
+        const int LocalDummy = g_Config.m_ClDummy;
+        const int LocalClientId = GameClient()->m_aLocalIds[LocalDummy];
+        if(LocalClientId < 0)
+                return;
+
+        if(m_aInputData[LocalDummy].m_Hook == 0)
+                return;
+
+        const int CheckTicks = std::clamp(g_Config.m_ClHookAssistTicks, 1, 50);
+        if(PredictFreeze(LocalClientId, m_aInputData[LocalDummy], CheckTicks))
+        {
+                m_aInputData[LocalDummy].m_Hook = 0;
+        }
+}
+
+bool CControls::PredictFreeze(int LocalClientId, const CNetObj_PlayerInput &Input, int Ticks)
+{
+        if(Ticks <= 0)
+                return false;
+
+        if(!GameClient()->Predict())
+                return false;
+
+        CGameWorld &World = GameClient()->m_ExtraPredictedWorld;
+        World.CopyWorldClean(&GameClient()->m_PredictedWorld);
+
+        CCharacter *pChar = World.GetCharacterById(LocalClientId);
+        if(!pChar)
+                return false;
+
+        CNetObj_PlayerInput SimulatedInput = Input;
+        SimulatedInput.m_PlayerFlags &= ~(PLAYERFLAG_CHATTING | PLAYERFLAG_IN_MENU | PLAYERFLAG_SCOREBOARD);
+        SimulatedInput.m_PlayerFlags |= PLAYERFLAG_PLAYING;
+
+        for(int i = 0; i < Ticks; ++i)
+        {
+                pChar->OnPredictedInput(&SimulatedInput);
+                World.m_GameTick++;
+                World.Tick();
+
+                pChar = World.GetCharacterById(LocalClientId);
+                if(!pChar)
+                        return false;
+
+                if(pChar->m_FreezeTime > 0 || pChar->Core()->m_IsInFreeze)
+                        return true;
+        }
+
+        return false;
 }
