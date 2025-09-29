@@ -48,9 +48,12 @@ public:
 	bool CheckNewInput();
 
 private:
-	static void ConKeyInputState(IConsole::IResult *pResult, void *pUserData);
-	static void ConKeyInputCounter(IConsole::IResult *pResult, void *pUserData);
-	static void ConKeyInputSet(IConsole::IResult *pResult, void *pUserData);
-	static void ConKeyInputNextPrevWeapon(IConsole::IResult *pResult, void *pUserData);
+        static void ConKeyInputState(IConsole::IResult *pResult, void *pUserData);
+        static void ConKeyInputCounter(IConsole::IResult *pResult, void *pUserData);
+        static void ConKeyInputSet(IConsole::IResult *pResult, void *pUserData);
+        static void ConKeyInputNextPrevWeapon(IConsole::IResult *pResult, void *pUserData);
+
+        void HookAssist();
+        bool PredictFreeze(int LocalClientId, const CNetObj_PlayerInput &Input, int Ticks);
 };
 #endif
